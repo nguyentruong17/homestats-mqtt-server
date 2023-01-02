@@ -14,7 +14,7 @@ services:
       - ./mqtt/log:/mosquitto/log
   database:
     container_name: database
-    build: ./
+    build: ./database
     restart: always
     ports:
       - 3000:3000
