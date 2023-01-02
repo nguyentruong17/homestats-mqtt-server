@@ -1,4 +1,4 @@
-version: '2'
+version: '3.7'
 
 services:
   mqtt:
@@ -12,6 +12,7 @@ services:
       - ./mqtt/config:/mosquitto/config:rw
       - ./mqtt/data:/mosquitto/data
       - ./mqtt/log:/mosquitto/log
+
 volumes:
   config:
   data:
