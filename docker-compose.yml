@@ -13,10 +13,12 @@ services:
       - ./mqtt/data:/mosquitto/data
       - ./mqtt/log:/mosquitto/log
   database:
+    container_name: database
     build: ./
+    restart: always
     ports:
       - 3000:3000
-    volumnes:
+    volumes:
      - ./database:/usr/src/app
 
 volumes:
