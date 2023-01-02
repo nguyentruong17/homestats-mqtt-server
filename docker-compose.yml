@@ -1,17 +1,17 @@
-version: '3.7'
+version: '2'
 
 services:
   mqtt:
     container_name: mosquitto
-    image_name: eclipse-mosquitto:2.0.15
+    image: arm64v8/eclipse-mosquitto:2.0.15
     restart: always
     ports:
       - 1883:1883
       - 9001:9001
     volumes:
-      - /home/nguyentruong/homestats-mqtt-server/mqtt/config:/mosquitto/config
-      - /home/nguyentruong/homestats-mqtt-server/mqtt/data:/mosquitto/data
-      - /home/nguyentruong/homestats-mqtt-server/mqtt/log:/mosquitto/log
+      - ./mqtt/config:/mosquitto/config:rw
+      - ./mqtt/data:/mosquitto/data
+      - ./mqtt/log:/mosquitto/log
 volumes:
   config:
   data:
