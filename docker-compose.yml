@@ -20,6 +20,8 @@ services:
       - 3000:3000
     volumes:
      - ./database:/usr/src/app
+    depends_on:
+      - mqtt
 
 volumes:
   config:
