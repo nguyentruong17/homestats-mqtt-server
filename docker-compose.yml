@@ -12,6 +12,12 @@ services:
       - ./mqtt/config:/mosquitto/config:rw
       - ./mqtt/data:/mosquitto/data
       - ./mqtt/log:/mosquitto/log
+  database:
+    build: ./
+    ports:
+      - 3000:3000
+    volumnes:
+     - ./database:/usr/src/app
 
 volumes:
   config:
