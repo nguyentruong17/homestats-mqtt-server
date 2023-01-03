@@ -8,7 +8,7 @@ def on_connect(client, userdata, flags, rc):
 
 def on_message(client, userdata, msg):
     message=msg.payload.decode("utf-8")
-    print(client,userdata, message)
+    print(client, userdata, message)
 
 
 # Initialize the client that should connect to the Mosquitto broker
