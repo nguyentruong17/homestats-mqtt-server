@@ -18,7 +18,7 @@ services:
     restart: always
     ports:
       - 3000:3000
-    volumes:
+    #volumes:
      #- ./database:/usr/src/app
     depends_on:
       - mqtt
