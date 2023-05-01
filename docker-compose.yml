@@ -19,7 +19,7 @@ services:
     ports:
       - 3000:3000
     volumes:
-     - ./database:/usr/src/app
+     #- ./database:/usr/src/app
     depends_on:
       - mqtt
 
