@@ -45,7 +45,7 @@ def on_message(client, userdata, msg):
         
         measure_name = measure_name[1:]
         
-        sql = 'INSERT INTO sensors_data (timestamp, group, sensor, measure_name, measure_value) VALUES (?, ?, ?, ?, ?)'
+        sql = 'INSERT INTO sensors_data (timestamp, rgroup, sensor, measure_name, measure_value) VALUES (?, ?, ?, ?, ?)'
         cursor = db_conn.cursor()
         cursor.execute(sql, (timestamp, group, sensor, measure_name, measure_value))
     
@@ -59,7 +59,7 @@ def main():
         CREATE TABLE IF NOT EXISTS sensors_data (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT NOT NULL,
-            group TEXT NOT NULL,
+            rgroup TEXT NOT NULL,
             sensor TEXT NOT NULL,
             measure_name TEXT NOT NULL,
             measure_value REAL NOT NULL
