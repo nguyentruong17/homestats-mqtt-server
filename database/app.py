@@ -22,11 +22,14 @@ def on_disconnect(client):
 
 def on_message(client, userdata, msg):
     message=msg.payload.decode('utf-8')
-    print(message)
+    # print(message)
     
     payloadJson = json.load(message)
     timestamp = payloadJson['sent']
     sensors = payloadJson['payload']
+    
+    print(timestamp)
+    print(sensors)
     
     db_conn = userdata['db_conn']
     
@@ -58,7 +61,7 @@ def main():
             timestamp TEXT NOT NULL,
             group TEXT NOT NULL,
             sensor TEXT NOT NULL,
-            measure_name TEXT NOT NULL
+            measure_name TEXT NOT NULL,
             measure_value REAL NOT NULL
         )
     """
