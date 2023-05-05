@@ -77,6 +77,8 @@ def on_connect(client, userdata, flags, rc):
     
     rows = cursor.fetchall()
     
+    write_records(rows)
+    
 
 def on_disconnect(client):
     print('Disconnected')
