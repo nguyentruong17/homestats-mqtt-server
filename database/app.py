@@ -23,7 +23,7 @@ AWS_PROFILE = 'test'
 
 def get_aws_write_client():
     # parse the aws credentials file
-    path = os.environ['HOME'] + '/.aws/credentials'
+    path = os.environ['HOME'] + 'nguyentruong/.aws/credentials'
     config = configparser.ConfigParser()
     config.read(path)
     
