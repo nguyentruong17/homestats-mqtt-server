@@ -68,9 +68,9 @@ def write_records(rows):
         record = {
             'Dimensions': dimensions,
             'MeasureName': measure_name,
-            'MeasureValue': measure_value,
+            'MeasureValue': str(measure_value),
             'MeasureValueType': 'DOUBLE',
-            'Time': timestamp
+            'Timestamp': timestamp
         }
         
         print(record)
