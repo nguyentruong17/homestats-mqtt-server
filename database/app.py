@@ -75,6 +75,8 @@ def write_records(rows):
         
         print(record)
         
+        records.append(record)
+        
     if (len(records) == 0):
         print('No record to write.')
         return
