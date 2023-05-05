@@ -8,6 +8,9 @@ import paho.mqtt.client as mqtt
 import re
 import sqlite3
 
+# PATH
+BASE_DIR = os.path.join(os.path.dirname( __file__ ), '..')
+
 # MQTT
 MQTT_HOST = '192.168.0.62'
 MQTT_PORT = 1883
@@ -21,8 +24,11 @@ DATABASE_FILE = 'sensors.db'
 AWS_PROFILE = 'test'
 
 def get_aws_write_client():
-    # parse the aws credentials file
-    # path = os.environ['HOME'] + '/.aws/credentials'
+    profile_name=os.environ['AWS_PROFILE']
+    
+    # parse the aws config file
+    config_path = BASE_DIR + '/.aws/config'
+    print(config_path)
     # config = configparser.ConfigParser()
     # config.read(path)
     
@@ -42,7 +48,7 @@ def get_aws_write_client():
     # if aws_access_key_id is None or aws_secret_access_key is None:
     #     print("AWS config values not set in '{}' in {}".format(AWS_PROFILE, path), True)
     #     return None
-    profile_name=os.environ['AWS_PROFILE']
+
     
     session = boto3.Session(profile_name=profile_name)
         
@@ -50,7 +56,7 @@ def get_aws_write_client():
             'timestream-write',
             # aws_access_key_id=aws_access_key_id,
             # aws_secret_access_key=aws_secret_access_key,
-            # region_name=aws_region,
+            region_name='us-east-2',
             config=Config(read_timeout=20,
                 max_pool_connections=5000,
                 retries={'max_attempts': 10}
