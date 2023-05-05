@@ -2,6 +2,7 @@
 import boto3
 from botocore.config import Config
 import configparser
+from datetime import datetime
 import json
 import os
 import paho.mqtt.client as mqtt
@@ -10,6 +11,9 @@ import sqlite3
 
 # PATH
 BASE_DIR = os.path.join(os.path.dirname( __file__ ), '..')
+
+# DATETIME
+DT_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 
 # MQTT
 MQTT_HOST = '192.168.0.62'
@@ -61,6 +65,9 @@ def write_records(rows):
         # print(row)
         sqlite_id, timestamp, rgroup, sensor, measure_name, measure_value = row
         
+        dt_obj = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S.%f')
+        time = int(round(dt_obj.timestamp() * 1000))
+        
         dimensions = [
             {'Name': 'rgroup', 'Value': rgroup},
             {'Name': 'sensor', 'Value': sensor} 
@@ -71,7 +78,7 @@ def write_records(rows):
             'MeasureName': measure_name,
             'MeasureValue': str(measure_value),
             'MeasureValueType': 'DOUBLE',
-            'Time': str(timestamp)
+            'Time': str(time)
         }
         
         print(record)
