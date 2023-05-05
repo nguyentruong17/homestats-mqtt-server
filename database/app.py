@@ -26,6 +26,8 @@ def get_aws_write_client():
     path = os.environ['HOME'] + '/.aws/credentials'
     config = configparser.ConfigParser()
     config.read(path)
+    
+    print(config)
 
     # read in the aws_access_key_id and the aws_secret_access_key
     # if the profile does not exist, error and exit
@@ -85,7 +87,7 @@ def on_disconnect(client):
 
 def on_message(client, userdata, msg):
     message=msg.payload.decode('utf-8')
-    print(message)
+    #print(message)
     
     payloadJson = json.loads(message)
     timestamp = payloadJson['sent']
