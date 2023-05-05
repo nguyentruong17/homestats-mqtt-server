@@ -18,7 +18,10 @@ services:
     restart: always
     ports:
       - 3000:3000
+    environment:
+      - AWS_PROFILE: ${AWS_PROFILE:-test}
     volumes:
+      - ./.aws/:/root/.aws:ro
       - ./database:/usr/src/app
     depends_on:
       - mqtt
