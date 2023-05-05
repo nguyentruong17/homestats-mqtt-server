@@ -108,7 +108,7 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe(TOPIC)
     
     db_conn = userdata['db_conn']
-    sql = "SELECT * FROM sensors_data WHERE timestamp >= datetime('now', '-1 day')"
+    sql = "SELECT * FROM sensors_data WHERE timestamp >= datetime('now', '-1 hour')"
     cursor = db_conn.cursor()
     cursor.execute(sql)
     
