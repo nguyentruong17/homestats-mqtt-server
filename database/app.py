@@ -22,41 +22,25 @@ DATABASE_FILE = 'sensors.db'
 
 # AWS
 AWS_PROFILE = 'test'
+DATABASE_NAME = 'testsensors'
+REGION_NAME = 'us-east-2'
+TABLE_NAME = 'metrics'
+
+def print_rejected_records_exceptions(err):
+    print("RejectedRecords: ", err)
+    for rr in err.response["RejectedRecords"]:
+        print("Rejected Index " + str(rr["RecordIndex"]) + ": " + rr["Reason"])
+    if "ExistingVersion" in rr:
+        print("Rejected record existing version: ", rr["ExistingVersion"])
 
 def get_aws_write_client():
     profile_name=os.environ['AWS_PROFILE']
-    
-    # parse the aws config file
-    config_path = BASE_DIR + '/.aws/config'
-    print(config_path)
-    # config = configparser.ConfigParser()
-    # config.read(path)
-    
-    # print(config.sections())
-
-    # # read in the aws_access_key_id and the aws_secret_access_key
-    # # if the profile does not exist, error and exit
-    # if AWS_PROFILE in config.sections():
-    #     aws_access_key_id = config[AWS_PROFILE]['aws_access_key_id']
-    #     aws_secret_access_key = config[AWS_PROFILE]['aws_secret_access_key']
-    #     aws_region = config[AWS_PROFILE]['aws_region'] or 'us-east-1'
-    # else:
-    #     print("Cannot find profile '{}' in {}".format(AWS_PROFILE, path), True)
-    #     return None
-
-    # # if we don't have both the access and secret key, error and exit
-    # if aws_access_key_id is None or aws_secret_access_key is None:
-    #     print("AWS config values not set in '{}' in {}".format(AWS_PROFILE, path), True)
-    #     return None
-
     
     session = boto3.Session(profile_name=profile_name)
         
     write_client = session.client(
             'timestream-write',
-            # aws_access_key_id=aws_access_key_id,
-            # aws_secret_access_key=aws_secret_access_key,
-            region_name='us-east-2',
+            region_name=REGION_NAME,
             config=Config(read_timeout=20,
                 max_pool_connections=5000,
                 retries={'max_attempts': 10}
@@ -67,11 +51,47 @@ def get_aws_write_client():
 
 def write_records(rows):
     write_client = get_aws_write_client()
-    if (write_client is None):
+
+    if (write_client is None): return
+    
+    records = []
+
+    for row in rows:
+        # print(row)
+        sqlite_id, timestamp, rgroup, sensor, measure_name, measure_value = row
+        
+        dimensions = [
+            {'Name': 'rgroup', 'Value': rgroup},
+            {'Name': 'sensor', 'Value': sensor} 
+        ]
+        
+        record = {
+            'Dimensions': dimensions,
+            'MeasureName': measure_name,
+            'MeasureValue': measure_value,
+            'MeasureValueType': 'DOUBLE',
+            'Time': timestamp
+        }
+        
+        print(record)
+        
+    if (len(records) == 0):
+        print('No record to write.')
         return
     
-    for row in rows:
-        print(row)
+    print('Writing records')
+    try:
+        result = write_client.write_records(
+            DatabaseName=DATABASE_NAME,
+            TableName=TABLE_NAME,
+            Records=records,
+            CommonAttributes={}
+        )
+        print("WriteRecords Status: [%s]" % result['ResponseMetadata']['HTTPStatusCode'])
+    except write_client.exceptions.RejectedRecordsException as err:
+        print_rejected_records_exceptions(err)
+    except Exception as err:
+        print("Error:", err)
     
 def on_connect(client, userdata, flags, rc):
     print('Connected with result code ' + str(rc))
@@ -79,7 +99,7 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe(TOPIC)
     
     db_conn = userdata['db_conn']
-    sql = "SELECT * FROM sensors_data WHERE timestamp <= datetime('now', '-1 day')"
+    sql = "SELECT * FROM sensors_data WHERE timestamp >= datetime('now', '-1 day')"
     cursor = db_conn.cursor()
     cursor.execute(sql)
     
