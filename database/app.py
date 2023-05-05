@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-import paho.mqtt.client as mqtt
-import sqlite3
-import re
+import boto3
+from botocore.config import Config
+import configparser
 import json
+import os
+import paho.mqtt.client as mqtt
+import re
+import sqlite3
+import sys
 
 # MQTT
 MQTT_HOST = '192.168.0.62'
@@ -13,9 +18,65 @@ TOPIC = 'bedroom/#'
 # SQLITE
 DATABASE_FILE = 'sensors.db'
 
+# AWS
+AWS_PROFILE = 'test'
+
+def get_aws_write_client():
+    # parse the aws credentials file
+    path = os.environ['HOME'] + '/.aws/credentials'
+    config = configparser.ConfigParser()
+    config.read(path)
+
+    # read in the aws_access_key_id and the aws_secret_access_key
+    # if the profile does not exist, error and exit
+    if AWS_PROFILE in config.sections():
+        aws_access_key_id = config[AWS_PROFILE]['aws_access_key_id']
+        aws_secret_access_key = config[AWS_PROFILE]['aws_secret_access_key']
+        aws_region = config[AWS_PROFILE]['aws_region'] or 'us-east-1'
+    else:
+        print("Cannot find profile '{}' in {}".format(AWS_PROFILE, path), True)
+        return None
+
+    # if we don't have both the access and secret key, error and exit
+    if aws_access_key_id is None or aws_secret_access_key is None:
+        print("AWS config values not set in '{}' in {}".format(AWS_PROFILE, path), True)
+        return None
+    
+    session = boto3.Session()
+        
+    write_client = session.client(
+            'timestream-write',
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            region_name=aws_region,
+            config=Config(read_timeout=20,
+                max_pool_connections=5000,
+                retries={'max_attempts': 10}
+            )
+        )
+    
+    return write_client
+
+def write_records(rows):
+    write_client = get_aws_write_client()
+    if (write_client is None):
+        return
+    
+    for row in rows:
+        print(row)
+    
 def on_connect(client, userdata, flags, rc):
     print('Connected with result code ' + str(rc))
+
     client.subscribe(TOPIC)
+    
+    db_conn = userdata['db_conn']
+    sql = "SELECT * FROM sensors_data WHERE timestamp <= datetime('now', '-1 day')"
+    cursor = db_conn.cursor()
+    cursor.execute(sql)
+    
+    rows = cursor.fetchall()
+    
 
 def on_disconnect(client):
     print('Disconnected')
@@ -27,9 +88,6 @@ def on_message(client, userdata, msg):
     payloadJson = json.loads(message)
     timestamp = payloadJson['sent']
     sensors = payloadJson['payload']
-    
-    print(timestamp)
-    print(sensors)
     
     db_conn = userdata['db_conn']
     
