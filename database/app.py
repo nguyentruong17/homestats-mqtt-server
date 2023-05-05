@@ -27,7 +27,7 @@ def get_aws_write_client():
     config = configparser.ConfigParser()
     config.read(path)
     
-    print(config)
+    print(config.sections())
 
     # read in the aws_access_key_id and the aws_secret_access_key
     # if the profile does not exist, error and exit
