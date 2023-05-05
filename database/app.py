@@ -71,7 +71,8 @@ def write_records(rows):
             'MeasureName': measure_name,
             'MeasureValue': str(measure_value),
             'MeasureValueType': 'DOUBLE',
-            'Time': str(timestamp)
+            'Time': str(timestamp),
+            'TimeUnit': 'MICROSECONDS'
         }
         
         print(record)
