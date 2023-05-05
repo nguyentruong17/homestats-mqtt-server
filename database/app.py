@@ -23,6 +23,7 @@ DATABASE_FILE = 'sensors.db'
 # AWS
 AWS_PROFILE = 'test'
 DATABASE_NAME = 'testsensors'
+MAX_RECORDS_PER_WRITE = 100
 REGION_NAME = 'us-east-2'
 TABLE_NAME = 'metrics'
 
@@ -82,18 +83,23 @@ def write_records(rows):
         return
     
     print('Writing records')
-    try:
-        result = write_client.write_records(
-            DatabaseName=DATABASE_NAME,
-            TableName=TABLE_NAME,
-            Records=records,
-            CommonAttributes={}
-        )
-        print("WriteRecords Status: [%s]" % result['ResponseMetadata']['HTTPStatusCode'])
-    except write_client.exceptions.RejectedRecordsException as err:
-        print_rejected_records_exceptions(err)
-    except Exception as err:
-        print("Error:", err)
+    
+    # https://www.geeksforgeeks.org/break-list-chunks-size-n-python/
+    batches = [records[i * MAX_RECORDS_PER_WRITE:(i + 1) * MAX_RECORDS_PER_WRITE] for i in range((len(records) + MAX_RECORDS_PER_WRITE - 1) // MAX_RECORDS_PER_WRITE )]
+    
+    for batch in batches: 
+        try:
+            result = write_client.write_records(
+                DatabaseName=DATABASE_NAME,
+                TableName=TABLE_NAME,
+                Records=batch,
+                CommonAttributes={}
+            )
+            print("WriteRecords Status: [%s]" % result['ResponseMetadata']['HTTPStatusCode'])
+        except write_client.exceptions.RejectedRecordsException as err:
+            print_rejected_records_exceptions(err)
+        except Exception as err:
+            print("Error:", err)
     
 def on_connect(client, userdata, flags, rc):
     print('Connected with result code ' + str(rc))
