@@ -70,7 +70,7 @@ def write_records(rows):
             'MeasureName': measure_name,
             'MeasureValue': str(measure_value),
             'MeasureValueType': 'DOUBLE',
-            'Timestamp': timestamp
+            'Time': timestamp
         }
         
         print(record)
