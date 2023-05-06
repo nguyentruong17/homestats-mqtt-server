@@ -113,14 +113,14 @@ def on_connect(client, userdata, flags, rc):
 
     client.subscribe(TOPIC)
     
-    db_conn = userdata['db_conn']
-    sql = "SELECT * FROM sensors_data WHERE timestamp >= datetime('now', '-1 hour')"
-    cursor = db_conn.cursor()
-    cursor.execute(sql)
+    # db_conn = userdata['db_conn']
+    # sql = "SELECT * FROM sensors_data WHERE timestamp >= datetime('now', '-1 hour')"
+    # cursor = db_conn.cursor()
+    # cursor.execute(sql)
     
-    rows = cursor.fetchall()
+    # rows = cursor.fetchall()
     
-    write_records(rows)
+    # write_records(rows)
     
 
 def on_disconnect(client):
