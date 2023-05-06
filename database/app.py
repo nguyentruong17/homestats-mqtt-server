@@ -128,7 +128,7 @@ def on_disconnect(client):
 
 def on_message(client, userdata, msg):
     message=msg.payload.decode('utf-8')
-    #print(message)
+    print(message)
     
     payloadJson = json.loads(message)
     timestamp = payloadJson['sent']
