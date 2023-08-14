@@ -22,14 +22,40 @@ MQTT_KEEPALIVE = 60
 TOPIC = 'bedroom/#'
 
 # SQLITE
-DATABASE_FILE = 'sensors.db'
+DATABASE_FILE = 'multisensors.db'
+SQLITE_TABLE_NAME = 'multi_sensors_data'
 
 # AWS
 AWS_PROFILE = 'test'
 DATABASE_NAME = 'testsensors'
 MAX_RECORDS_PER_WRITE = 100
 REGION_NAME = 'us-east-2'
-TABLE_NAME = 'metrics'
+TABLE_NAME = 'multimetrics'
+            
+# SENSORS
+SENSOR_NAMES_SET = {
+    'sys_cpu__utilization',
+    'sys_mem__usage',
+    'sys_gpu__mem_clock',
+    'sys_gpu__utilization',
+    'sys_gpu__mem_usage',
+    'temp_mobo__measure',
+    'temp_chipset__measure',
+    'temp_gpu__measure',
+    'temp_gpu__hotspot',
+    'fan_cpu__measure',
+    'fan_gpu__fan1',
+    'fan_gpu__fan2',
+    'fan_gpu__fan3',
+    'voltage_gpu__measure',
+    'wattage_gpu__measure',
+    'sys_cpu__clock_core_max',
+    'sys_cpu__clock_core_min',
+    'sys_cpu__utilization_thread_max',
+    'sys_cpu__utilization_thread_min',
+    'temp_hdd__hdd1',
+    'temp_hdd__hdd2'
+}
 
 def print_rejected_records_exceptions(err):
     print("RejectedRecords: ", err)
@@ -77,7 +103,7 @@ def write_records(rows):
             'Dimensions': dimensions,
             'MeasureName': measure_name,
             'MeasureValue': str(measure_value),
-            'MeasureValueType': 'DOUBLE',
+            'MeasureValueType': 'MULTI',
             'Time': str(time)
         }
         
@@ -121,14 +147,13 @@ def on_connect(client, userdata, flags, rc):
     # rows = cursor.fetchall()
     
     # write_records(rows)
-    
 
 def on_disconnect(client):
     print('Disconnected')
 
 def on_message(client, userdata, msg):
     message=msg.payload.decode('utf-8')
-    print(message)
+    # print(message)
     
     payloadJson = json.loads(message)
     timestamp = payloadJson['sent']
@@ -136,39 +161,55 @@ def on_message(client, userdata, msg):
     
     db_conn = userdata['db_conn']
     
-    for each in sensors:
-        id = each['Id']
-        measure_value = each['Value']
-        
-        parts = re.split('\[(.*?)\]', id)
-        
-        segments = filter(lambda part: bool(part), parts)
-        
-        group, sensor, measure_name = segments
-        
-        measure_name = measure_name[1:]
-        
-        sql = 'INSERT INTO sensors_data (timestamp, rgroup, sensor, measure_name, measure_value) VALUES (?, ?, ?, ?, ?)'
-        cursor = db_conn.cursor()
-        cursor.execute(sql, (timestamp, group, sensor, measure_name, measure_value))
+    sensorsDict = dict.fromkeys(SENSOR_NAMES_SET, -1)
+    sensorsDict['timestamp'] = timestamp
     
+    for each in sensors:
+        key = each['Id']
+        value = each['Value']
+        
+        if key in sensorsDict:
+            sensorsDict[key] = value
+    
+    sensors = list(SENSOR_NAMES_SET)
+    cols = ', '.join(sensors)
+    
+    vals = map(lambda col: ':' + col, sensors)
+    vals = ', '.join(vals)
+    
+    sql = f"""INSERT INTO {SQLITE_TABLE_NAME}
+        (
+            timestamp,
+            {cols}
+        ) VALUES
+        (
+            :timestamp,
+            {vals}
+        )
+    """
+
+    cursor = db_conn.cursor()
+    cursor.execute(sql, sensorsDict)
     db_conn.commit()
     cursor.close()
 
 def main():
+    cols = list(SENSOR_NAMES_SET)
+    cols = map(lambda col: col + ' REAL NOT NULL', cols)
+    sql = ', '.join(cols)
+    
     # Initialize SQLITE3
     db_conn = sqlite3.connect(DATABASE_FILE)
-    sql = """
-        CREATE TABLE IF NOT EXISTS sensors_data (
+    sql = f"""
+        CREATE TABLE IF NOT EXISTS {SQLITE_TABLE_NAME} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT NOT NULL,
-            rgroup TEXT NOT NULL,
-            sensor TEXT NOT NULL,
-            measure_name TEXT NOT NULL,
-            measure_value REAL NOT NULL
+            {sql}
         )
     """
+    
     cursor = db_conn.cursor()
+    cursor.execute(f'DROP TABLE IF EXISTS {SQLITE_TABLE_NAME}')
     cursor.execute(sql)
     cursor.close()
 
