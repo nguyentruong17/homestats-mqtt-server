@@ -128,5 +128,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-./database/sensors.db
 .aws/credentials
+./database/sensors.db
+./database/multisensors.db
+./mqtt/data
+./mqtt/log
