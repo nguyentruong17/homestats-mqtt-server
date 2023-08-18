@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-import boto3
-from botocore.config import Config
+
 # import configparser
+# import re
+from botocore.config import Config
 from datetime import datetime
+import boto3
 import json
 import os
 import paho.mqtt.client as mqtt
-# import re
+import schedule
 import sqlite3
+import threading
+import time
 
 # PATH
 BASE_DIR = os.path.join(os.path.dirname( __file__ ), '..')
@@ -154,25 +158,11 @@ def write_records(rows):
             print_rejected_records_exceptions(err)
         except Exception as err:
             print("Error:", err)
-    
+
 def on_connect(client, userdata, flags, rc):
     print('Connected with result code ' + str(rc))
 
     client.subscribe(TOPIC)
-    
-    db_conn = userdata['db_conn']
-    sql = f"SELECT * FROM {SQLITE_TABLE_NAME} WHERE timestamp >= datetime('now', '-2 hour')"
-    cursor = db_conn.cursor()
-    cursor.execute(sql)
-    
-    rows = cursor.fetchall()
-    
-    print(f'numrows: {len(rows)}')
-    print('WriteRecords started')
-    write_records(rows)
-    print('WriteRecords completed')
-    # db_conn.commit()
-    # cursor.close()
 
 def on_disconnect(client):
     print('Disconnected')
@@ -220,12 +210,13 @@ def on_message(client, userdata, msg):
     db_conn.commit()
     cursor.close()
 
-def main():
+def init_sql_table():
     cols = map(lambda col: col + ' REAL NOT NULL', SORTED_SENSORS_LIST)
     sql = ', '.join(cols)
     
+    print(f'init sql table with cols {sql}.')
     # Initialize SQLITE3
-    db_conn = sqlite3.connect(DATABASE_FILE)
+    db_conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
     sql = f"""
         CREATE TABLE IF NOT EXISTS {SQLITE_TABLE_NAME} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -238,10 +229,16 @@ def main():
     # cursor.execute(f'DROP TABLE IF EXISTS {SQLITE_TABLE_NAME}')
     cursor.execute(sql)
     cursor.close()
+    
+    print(f'init sql table completed.')
+    
+    return db_conn
 
-    # Initialize the client that should connect to the Mosquitto broker
-    print('Before Init MQTT')
+def connect_mqtt(userdata):
+    print('init mqtt connection thread.')
     client = mqtt.Client()
+    
+    db_conn = userdata['db_conn']
     
     client.user_data_set({'db_conn': db_conn})
 
@@ -251,7 +248,42 @@ def main():
 
     client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
 
-    # Blocking loop to the Mosquitto broker
-    client.loop_forever()
+    client.loop_start()
+    
+    print('init mqtt connection thread completed.')
 
-main()
+def run_threaded(job_func, userdata):
+    job_thread = threading.Thread(target=job_func, args=(userdata,))
+    job_thread.start()
+
+def publish_local(userdata):
+    db_conn = userdata['db_conn']
+
+    sql = f"SELECT * FROM {SQLITE_TABLE_NAME} WHERE timestamp >= datetime('now', '-1 hour')"
+    cursor = db_conn.cursor()
+    cursor.execute(sql)
+    
+    rows = cursor.fetchall()
+    db_conn.commit()
+    cursor.close()
+    
+    print(f'numrows: {len(rows)}')
+    print('publishing to remote')
+    
+    print('WriteRecords started')
+    write_records(rows)
+    print('WriteRecords completed')
+
+def clear_local(userdata):
+    print('clearing from local')
+
+db_conn = init_sql_table()
+userdata={'db_conn': db_conn}
+connect_mqtt(userdata)
+
+schedule.every(1).hours.do(run_threaded, publish_local, userdata=userdata)
+# schedule.every(2).minutes.do(run_threaded, clear_local, userdata=userdata)
+
+while True:
+    schedule.run_pending()
+    time.sleep(1)

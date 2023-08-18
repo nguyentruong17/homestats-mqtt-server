@@ -22,10 +22,20 @@ services:
       AWS_PROFILE: "${AWS_PROFILE:-test}"
     volumes:
       - ./.aws/:/root/.aws:ro
-      - ./database:/usr/src/app
+      - ./database:/usr/src/database
     depends_on:
       - mqtt
-
+  # database-cron:
+  #   container_name: database-cron
+  #   build: ./database-cron
+  #   environment:
+  #     AWS_PROFILE: "${AWS_PROFILE:-test}"
+  #   volumes:
+  #     - ./.aws/:/root/.aws:ro
+  #     - ./database:/usr/src/database
+  #     - ./database-cron:/usr/src/database-cron
+  #   depends_on:
+  #     - database
 volumes:
   config:
   data:
