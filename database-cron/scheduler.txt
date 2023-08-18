@@ -1,0 +1,2 @@
+* * * * * /usr/local/bin/python3 /usr/src/database-cron/publish-remote.py >> /var/log/cron-publish-remote.log 2>&1; */2 * * * * /usr/local/bin/python3 /usr/src/database-cron/publish-remote.py
+# This extra line makes it a valid cron

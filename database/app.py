@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-import boto3
-from botocore.config import Config
-# import configparser
+
+from aws_utils import get_aws_write_client, prepare_common_attributes, prepare_measure, print_rejected_records_exceptions
 from datetime import datetime
+from flask import Flask, request
 import json
 import os
 import paho.mqtt.client as mqtt
-# import re
+import schedule
 import sqlite3
+import threading
+import time
 
 # PATH
 BASE_DIR = os.path.join(os.path.dirname( __file__ ), '..')
@@ -25,81 +27,173 @@ TOPIC = 'bedroom/#'
 DATABASE_FILE = 'multisensors.db'
 SQLITE_TABLE_NAME = 'multi_sensors_data'
 
+# SENSORS
+SENSOR_NAMES_SET = {
+    'fan_cpu__measure',
+    'fan_gpu__fan1',
+    'fan_gpu__fan2',
+    'fan_gpu__fan3',
+    'sys_cpu__clock_core_max',
+    'sys_cpu__clock_core_min',
+    'sys_cpu__clock',
+    'sys_cpu__utilization_thread_max',
+    'sys_cpu__utilization_thread_min',
+    'sys_cpu__utilization',
+    'sys_gpu__mem_clock',
+    'sys_gpu__mem_usage',
+    'sys_gpu__utilization',
+    'sys_mem__clock',
+    'sys_mem__usage',
+    'temp_chipset__measure',
+    'temp_cpu__measure',
+    'temp_gpu__hotspot',
+    'temp_gpu__measure',
+    'temp_hdd__hdd1',
+    'temp_hdd__hdd2',
+    'temp_mobo__measure',
+    'voltage_cpu__measure',
+    'voltage_gpu__measure',
+    'wattage_cpu__measure',
+    'wattage_gpu__measure'
+}
+SORTED_SENSORS_LIST = sorted(list(SENSOR_NAMES_SET))
+
 # AWS
 AWS_PROFILE = 'test'
 DATABASE_NAME = 'testsensors'
 MAX_RECORDS_PER_WRITE = 100
 REGION_NAME = 'us-east-2'
 TABLE_NAME = 'multimetrics'
-            
-# SENSORS
-SENSOR_NAMES_SET = {
-    'sys_cpu__utilization',
-    'sys_mem__usage',
-    'sys_gpu__mem_clock',
-    'sys_gpu__utilization',
-    'sys_gpu__mem_usage',
-    'temp_mobo__measure',
-    'temp_chipset__measure',
-    'temp_gpu__measure',
-    'temp_gpu__hotspot',
-    'fan_cpu__measure',
-    'fan_gpu__fan1',
-    'fan_gpu__fan2',
-    'fan_gpu__fan3',
-    'voltage_gpu__measure',
-    'wattage_gpu__measure',
-    'sys_cpu__clock_core_max',
-    'sys_cpu__clock_core_min',
-    'sys_cpu__utilization_thread_max',
-    'sys_cpu__utilization_thread_min',
-    'temp_hdd__hdd1',
-    'temp_hdd__hdd2'
-}
-SORTED_SENSORS_LIST = sorted(list(SENSOR_NAMES_SET))
 
-def print_rejected_records_exceptions(err):
-    print("RejectedRecords: ", err)
-    for rr in err.response["RejectedRecords"]:
-        print("Rejected Index " + str(rr["RecordIndex"]) + ": " + rr["Reason"])
-    if "ExistingVersion" in rr:
-        print("Rejected record existing version: ", rr["ExistingVersion"])
+# FLASK
+FLASK_APP = Flask(__name__)
+FLASK_PORT = 3000
 
-def get_aws_write_client():
-    profile_name=os.environ['AWS_PROFILE']
+def on_connect(client, userdata, flags, rc):
+    print(f'Connected with result code {rc}')
+
+    client.subscribe(TOPIC)
+
+def on_disconnect(client):
+    print('Disconnected')
+
+def on_message(client, userdata, msg):
+    message=msg.payload.decode('utf-8')
     
-    session = boto3.Session(profile_name=profile_name)
-
-    write_client = session.client(
-            'timestream-write',
-            region_name=REGION_NAME,
-            config=Config(read_timeout=20,
-                max_pool_connections=5000,
-                retries={'max_attempts': 10}
-            )
+    payloadJson = json.loads(message)
+    timestamp = payloadJson['sent']
+    delimitter = payloadJson['delimitter']
+    sensors = payloadJson['payload']
+    # json_formatted_str = json.dumps(payloadJson, indent=4)
+    # print(f'message received at: {timestamp}. {json_formatted_str}')
+    print(f'Message received at: {timestamp}')
+    db_conn = userdata['db_conn']
+    
+    sensorsDict = dict.fromkeys(SENSOR_NAMES_SET, -1)
+    
+    for each in sensors:
+        key = each['Id']
+        value = each['Value']
+        
+        if key in sensorsDict:
+            sensorsDict[key] = value
+    
+    cols = ', '.join(SORTED_SENSORS_LIST)
+    vals = map(lambda col: ':' + col, SORTED_SENSORS_LIST)
+    vals = ', '.join(vals)
+    
+    sql = f"""INSERT INTO {SQLITE_TABLE_NAME}
+        (
+            timestamp,
+            {cols}
+        ) VALUES
+        (
+            :timestamp,
+            {vals}
         )
-    
-    return write_client
+    """
 
-def prepare_common_attributes():
-    common_attributes = {
-        'Dimensions': [
-            {'Name': 'hostname', 'Value': 'Torrent7'}
-        ],
-        'MeasureName': 'metric',
-        'MeasureValueType': 'MULTI'
-    }
-    
-    return common_attributes
+    sensorsDict['timestamp'] = timestamp
+    cursor = db_conn.cursor()
+    cursor.execute(sql, sensorsDict)
+    db_conn.commit()
+    cursor.close()
 
-def prepare_measure(measure_name, measure_value):
-    measure = {
-        'Name': measure_name,
-        'Value': str(measure_value),
-        'Type': 'DOUBLE'
-    }
+def get_db_conn(use_row = False):
+    db_conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
     
-    return measure
+    if use_row:
+        db_conn.row_factory = sqlite3.Row 
+    
+    return db_conn
+
+def init_sql_table():
+    print(f'init_sql_table started')
+    cols = map(lambda col: col + ' REAL NOT NULL', SORTED_SENSORS_LIST)
+    sql = ', '.join(cols)
+
+    # Initialize SQLITE3
+    db_conn = get_db_conn()
+    sql = f"""
+        CREATE TABLE IF NOT EXISTS {SQLITE_TABLE_NAME} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            {sql}
+        )
+    """
+    
+    cursor = db_conn.cursor()
+    # cursor.execute(f'DROP TABLE IF EXISTS {SQLITE_TABLE_NAME}')
+    cursor.execute(sql)
+    db_conn.commit()
+    cursor.close()
+    
+    print(f'init_sql_table completed')
+    
+    return db_conn
+
+def connect_mqtt(userdata):
+    print('connect_mqtt started')
+    client = mqtt.Client()
+    
+    db_conn = userdata['db_conn']
+    
+    client.user_data_set({'db_conn': db_conn})
+
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.on_disconnect = on_disconnect
+
+    client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
+
+    client.loop_start()
+    
+    print('connect_mqtt completed')
+
+def init_flask():
+    print(f'init flask at port {FLASK_PORT}.')
+    
+    FLASK_APP.run(host='0.0.0.0', port=FLASK_PORT)
+    
+    print(f'init flask completed')
+
+@FLASK_APP.route('/metrics', methods = ['GET'])
+def index():
+    filter_minutes = request.args.get('minutes', default = 1, type = int)
+    filter_group = request.args.get('group', default = '*', type = str)
+    filter_group = filter_group.lower()
+    filter_sensor = request.args.get('sensor', default = '*', type = str)
+    filter_sensor = filter_sensor.lower()
+
+    db_conn = get_db_conn(True)
+    sql = f"SELECT * FROM {SQLITE_TABLE_NAME} WHERE timestamp >= datetime('now', '-{filter_minutes} minute')"
+    cursor = db_conn.cursor()
+    cursor.execute(sql)
+    rows = cursor.fetchall()
+    cursor.close()
+    
+    json_string = json.dumps([dict(row) for row in rows]) 
+    return json_string
 
 def write_records(rows):
     write_client = get_aws_write_client()
@@ -127,20 +221,21 @@ def write_records(rows):
             record['MeasureValues'].append(measure)
               
         records.append(record)
-     
-    print(f'numrecords: {len(records)}')
+
     if (len(records) == 0):
-        print('No record to write.')
+        print('write_records: no record to write')
         return
-    
-    print(f'lastrecod: {records[-1]}')
+
+    print(f'write_records length: {len(records)}')    
+    print(f'write_records first: {records[0]}')
+    print(f'write_records last: {records[-1]}')
     
     # https://www.geeksforgeeks.org/break-list-chunks-size-n-python/
     batches = [records[i * MAX_RECORDS_PER_WRITE:(i + 1) * MAX_RECORDS_PER_WRITE] for i in range((len(records) + MAX_RECORDS_PER_WRITE - 1) // MAX_RECORDS_PER_WRITE )]
-    print(f'numbatches: {len(batches)}')
+    
+    print(f'write_records batches: {len(batches)}.')
+    print('write_records started')
     common_attributes = prepare_common_attributes()
-
-    print('WriteRecords in progress...')    
     for batch in batches: 
         try:
             result = write_client.write_records(
@@ -149,109 +244,50 @@ def write_records(rows):
                 Records=batch,
                 CommonAttributes=common_attributes
             )
-            print("WriteRecords Status: [%s]" % result['ResponseMetadata']['HTTPStatusCode'])
+            print(f"write_recordsstatus: [{result['ResponseMetadata']['HTTPStatusCode']}]")
         except write_client.exceptions.RejectedRecordsException as err:
             print_rejected_records_exceptions(err)
         except Exception as err:
-            print("Error:", err)
-    
-def on_connect(client, userdata, flags, rc):
-    print('Connected with result code ' + str(rc))
+            print(f'write_records error: {err}')
+    print('write_records completed')
 
-    client.subscribe(TOPIC)
+def run_threaded(job_func, userdata):
+    job_thread = threading.Thread(target=job_func, args=(userdata,))
+    job_thread.start()
     
+def publish_remote(userdata):
+    print('publish_remote started')
     db_conn = userdata['db_conn']
-    sql = f"SELECT * FROM {SQLITE_TABLE_NAME} WHERE timestamp >= datetime('now', '-2 hour')"
+
+    sql = f"SELECT * FROM {SQLITE_TABLE_NAME} WHERE timestamp >= datetime('now', '-1 hour')"
     cursor = db_conn.cursor()
     cursor.execute(sql)
     
     rows = cursor.fetchall()
+    cursor.close()
     
     print(f'numrows: {len(rows)}')
-    print('WriteRecords started')
     write_records(rows)
-    print('WriteRecords completed')
-    # db_conn.commit()
-    # cursor.close()
+    print('publish_remote completed')
 
-def on_disconnect(client):
-    print('Disconnected')
-
-def on_message(client, userdata, msg):
-    message=msg.payload.decode('utf-8')
-    
-    payloadJson = json.loads(message)
-    timestamp = payloadJson['sent']
-    delimitter = payloadJson['delimitter']
-    sensors = payloadJson['payload']
-    
-    print(f'message received at: {timestamp}')
-    
+def clear_local(userdata):
+    print('clear_local started')
     db_conn = userdata['db_conn']
-    
-    sensorsDict = dict.fromkeys(SENSOR_NAMES_SET, -1)
-    
-    for each in sensors:
-        key = each['Id']
-        value = each['Value']
-        
-        if key in sensorsDict:
-            sensorsDict[key] = value
-    
-    cols = ', '.join(SORTED_SENSORS_LIST)
-    
-    vals = map(lambda col: ':' + col, SORTED_SENSORS_LIST)
-    vals = ', '.join(vals)
-    
-    sql = f"""INSERT INTO {SQLITE_TABLE_NAME}
-        (
-            timestamp,
-            {cols}
-        ) VALUES
-        (
-            :timestamp,
-            {vals}
-        )
-    """
-
-    sensorsDict['timestamp'] = timestamp
+    sql = "DELETE FROM {SQLITE_TABLE_NAME} WHERE timestamp <= datetime('now','-2 day')"; 
     cursor = db_conn.cursor()
-    cursor.execute(sql, sensorsDict)
+    cursor.execute(sql)
     db_conn.commit()
     cursor.close()
+    print('clear_local completed')
 
-def main():
-    cols = map(lambda col: col + ' REAL NOT NULL', SORTED_SENSORS_LIST)
-    sql = ', '.join(cols)
-    
-    # Initialize SQLITE3
-    db_conn = sqlite3.connect(DATABASE_FILE)
-    sql = f"""
-        CREATE TABLE IF NOT EXISTS {SQLITE_TABLE_NAME} (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            {sql}
-        )
-    """
-    
-    cursor = db_conn.cursor()
-    # cursor.execute(f'DROP TABLE IF EXISTS {SQLITE_TABLE_NAME}')
-    cursor.execute(sql)
-    cursor.close()
+db_conn = init_sql_table()
+userdata={'db_conn': db_conn}
+connect_mqtt(userdata)
+init_flask()
 
-    # Initialize the client that should connect to the Mosquitto broker
-    print('Before Init MQTT')
-    client = mqtt.Client()
-    
-    client.user_data_set({'db_conn': db_conn})
+schedule.every(1).hours.do(run_threaded, publish_remote, userdata=userdata)
+schedule.every(1).hours.do(run_threaded, clear_local, userdata=userdata)
 
-    client.on_connect = on_connect
-    client.on_message = on_message
-    client.on_disconnect = on_disconnect
-
-    client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
-
-    # Blocking loop to the Mosquitto broker
-    client.loop_forever()
-
-main()
+while True:
+    schedule.run_pending()
+    time.sleep(1)
