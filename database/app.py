@@ -286,7 +286,7 @@ connect_mqtt(userdata)
 init_flask()
 
 schedule.every(1).hours.do(run_threaded, publish_local, userdata=userdata)
-schedule.every(2).minutes.do(run_threaded, clear_local, userdata=userdata)
+schedule.every(1).hours.do(run_threaded, clear_local, userdata=userdata)
 
 while True:
     schedule.run_pending()
