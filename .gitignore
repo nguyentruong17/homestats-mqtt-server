@@ -129,6 +129,6 @@ dmypy.json
 .pyre/
 
 .aws/credentials
-.database/sensors.db
-.database/multisensors.db
-.mqtt/
+database/multisensors.db
+mqtt/*
+!mqtt/config/*
