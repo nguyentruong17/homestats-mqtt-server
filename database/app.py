@@ -128,10 +128,10 @@ def get_db_conn(use_row = False):
     return db_conn
 
 def init_sql_table():
+    print(f'init_sql_table started')
     cols = map(lambda col: col + ' REAL NOT NULL', SORTED_SENSORS_LIST)
     sql = ', '.join(cols)
-    
-    print(f'init sql table with cols {sql}.')
+
     # Initialize SQLITE3
     db_conn = get_db_conn()
     sql = f"""
@@ -148,12 +148,12 @@ def init_sql_table():
     db_conn.commit()
     cursor.close()
     
-    print(f'init sql table completed.')
+    print(f'init_sql_table completed')
     
     return db_conn
 
 def connect_mqtt(userdata):
-    print('init mqtt connection thread.')
+    print('connect_mqtt started')
     client = mqtt.Client()
     
     db_conn = userdata['db_conn']
@@ -168,14 +168,14 @@ def connect_mqtt(userdata):
 
     client.loop_start()
     
-    print('init mqtt connection thread completed.')
+    print('connect_mqtt completed')
 
 def init_flask():
     print(f'init flask at port {FLASK_PORT}.')
     
     FLASK_APP.run(host='0.0.0.0', port=FLASK_PORT)
     
-    print(f'init flask completed.')
+    print(f'init flask completed')
 
 @FLASK_APP.route('/metrics', methods = ['GET'])
 def index():
@@ -223,18 +223,18 @@ def write_records(rows):
         records.append(record)
 
     if (len(records) == 0):
-        print('write record: no record to write.')
+        print('write_records: no record to write')
         return
 
-    print(f'write record length: {len(records)}.')    
-    print(f'write record first: {records[0]}.')
-    print(f'write record last: {records[-1]}.')
+    print(f'write_records length: {len(records)}')    
+    print(f'write_records first: {records[0]}')
+    print(f'write_records last: {records[-1]}')
     
     # https://www.geeksforgeeks.org/break-list-chunks-size-n-python/
     batches = [records[i * MAX_RECORDS_PER_WRITE:(i + 1) * MAX_RECORDS_PER_WRITE] for i in range((len(records) + MAX_RECORDS_PER_WRITE - 1) // MAX_RECORDS_PER_WRITE )]
     
-    print(f'write record batches: {len(batches)}.')
-    print('writing record')
+    print(f'write_records batches: {len(batches)}.')
+    print('write_records started')
     common_attributes = prepare_common_attributes()
     for batch in batches: 
         try:
@@ -244,19 +244,19 @@ def write_records(rows):
                 Records=batch,
                 CommonAttributes=common_attributes
             )
-            print(f"write record status: [{result['ResponseMetadata']['HTTPStatusCode']}]")
+            print(f"write_recordsstatus: [{result['ResponseMetadata']['HTTPStatusCode']}]")
         except write_client.exceptions.RejectedRecordsException as err:
             print_rejected_records_exceptions(err)
         except Exception as err:
-            print(f'write record error: {err}')
-    print('write record completed.')
+            print(f'write_records error: {err}')
+    print('write_records completed')
 
 def run_threaded(job_func, userdata):
     job_thread = threading.Thread(target=job_func, args=(userdata,))
     job_thread.start()
     
-def publish_local(userdata):
-    print('publishing to remote')
+def publish_remote(userdata):
+    print('publish_remote started')
     db_conn = userdata['db_conn']
 
     sql = f"SELECT * FROM {SQLITE_TABLE_NAME} WHERE timestamp >= datetime('now', '-1 hour')"
@@ -268,24 +268,24 @@ def publish_local(userdata):
     
     print(f'numrows: {len(rows)}')
     write_records(rows)
-    print('publishing to remote completed')
+    print('publish_remote completed')
 
 def clear_local(userdata):
-    print('clearing from local')
+    print('clear_local started')
     db_conn = userdata['db_conn']
     sql = "DELETE FROM {SQLITE_TABLE_NAME} WHERE timestamp <= datetime('now','-2 day')"; 
     cursor = db_conn.cursor()
     cursor.execute(sql)
     db_conn.commit()
     cursor.close()
-    print('clearing from local completed')
+    print('clear_local completed')
 
 db_conn = init_sql_table()
 userdata={'db_conn': db_conn}
 connect_mqtt(userdata)
 init_flask()
 
-schedule.every(1).hours.do(run_threaded, publish_local, userdata=userdata)
+schedule.every(1).hours.do(run_threaded, publish_remote, userdata=userdata)
 schedule.every(1).hours.do(run_threaded, clear_local, userdata=userdata)
 
 while True:
