@@ -173,7 +173,8 @@ def connect_mqtt(userdata):
 def init_flask():
     print(f'init flask at port {FLASK_PORT}.')
     
-    FLASK_APP.run(host='0.0.0.0', port=FLASK_PORT)
+    flask_thread = threading.Thread(target=lambda: FLASK_APP.run(host='0.0.0.0', port=FLASK_PORT, debug=True, use_reloader=False))
+    flask_thread.start()
     
     print(f'init flask completed')
 
@@ -273,9 +274,10 @@ def publish_remote(userdata):
 def clear_local(userdata):
     print('clear_local started')
     db_conn = userdata['db_conn']
-    sql = "DELETE FROM {SQLITE_TABLE_NAME} WHERE timestamp <= datetime('now','-2 day')"; 
+    sql = "DELETE FROM {SQLITE_TABLE_NAME} WHERE timestamp BETWEEN datetime('now','-3 minute') AND datetime('now','-2 minute')"; 
     cursor = db_conn.cursor()
     cursor.execute(sql)
+    print(f'total deletion = {db_conn.total_changes}\n')
     db_conn.commit()
     cursor.close()
     print('clear_local completed')
@@ -285,8 +287,8 @@ userdata={'db_conn': db_conn}
 connect_mqtt(userdata)
 init_flask()
 
-schedule.every(1).hours.do(run_threaded, publish_remote, userdata=userdata)
-schedule.every(1).hours.do(run_threaded, clear_local, userdata=userdata)
+# schedule.every(1).hours.do(run_threaded, publish_remote, userdata=userdata)
+schedule.every(3).minutes.do(run_threaded, clear_local, userdata=userdata)
 
 while True:
     schedule.run_pending()
