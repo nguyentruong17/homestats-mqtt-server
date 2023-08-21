@@ -1,73 +1,36 @@
 #!/usr/bin/env python3
 
-from aws_utils import get_aws_write_client, prepare_common_attributes, prepare_measure, print_rejected_records_exceptions
+from aws_utils import (
+    get_aws_write_client,
+    prepare_common_attributes,
+    prepare_measure,
+    print_rejected_records_exceptions
+)
+from constants import (
+    DATABASE_FILE,
+    DATABASE_NAME,
+    FLASK_PORT,
+    MAX_RECORDS_PER_WRITE,
+    MQTT_HOST,
+    MQTT_KEEPALIVE,
+    MQTT_PORT,
+    SENSOR_NAMES_SET,
+    SORTED_SENSORS_LIST,
+    SQLITE_TABLE_NAME,
+    TABLE_NAME,
+    TOPIC
+)
 from datetime import datetime
 from flask import Flask, request
+from thread_utils import run_threaded
 import json
-import os
 import paho.mqtt.client as mqtt
 import schedule
 import sqlite3
 import threading
 import time
 
-# PATH
-BASE_DIR = os.path.join(os.path.dirname( __file__ ), '..')
-
-# DATETIME
-DT_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
-
-# MQTT
-MQTT_HOST = '192.168.0.62'
-MQTT_PORT = 1883
-MQTT_KEEPALIVE = 60
-TOPIC = 'bedroom/#'
-
-# SQLITE
-DATABASE_FILE = 'multisensors.db'
-SQLITE_TABLE_NAME = 'multi_sensors_data'
-
-# SENSORS
-SENSOR_NAMES_SET = {
-    'fan_cpu__measure',
-    'fan_gpu__fan1',
-    'fan_gpu__fan2',
-    'fan_gpu__fan3',
-    'sys_cpu__clock_core_max',
-    'sys_cpu__clock_core_min',
-    'sys_cpu__clock',
-    'sys_cpu__utilization_thread_max',
-    'sys_cpu__utilization_thread_min',
-    'sys_cpu__utilization',
-    'sys_gpu__mem_clock',
-    'sys_gpu__mem_usage',
-    'sys_gpu__utilization',
-    'sys_mem__clock',
-    'sys_mem__usage',
-    'temp_chipset__measure',
-    'temp_cpu__measure',
-    'temp_gpu__hotspot',
-    'temp_gpu__measure',
-    'temp_hdd__hdd1',
-    'temp_hdd__hdd2',
-    'temp_mobo__measure',
-    'voltage_cpu__measure',
-    'voltage_gpu__measure',
-    'wattage_cpu__measure',
-    'wattage_gpu__measure'
-}
-SORTED_SENSORS_LIST = sorted(list(SENSOR_NAMES_SET))
-
-# AWS
-AWS_PROFILE = 'test'
-DATABASE_NAME = 'testsensors'
-MAX_RECORDS_PER_WRITE = 100
-REGION_NAME = 'us-east-2'
-TABLE_NAME = 'multimetrics'
-
-# FLASK
 FLASK_APP = Flask(__name__)
-FLASK_PORT = 3000
 
 def on_connect(client, userdata, flags, rc):
     print(f'Connected with result code {rc}')
@@ -143,7 +106,7 @@ def init_sql_table():
     """
     
     cursor = db_conn.cursor()
-    # cursor.execute(f'DROP TABLE IF EXISTS {SQLITE_TABLE_NAME}')
+    cursor.execute(f'DROP TABLE IF EXISTS {SQLITE_TABLE_NAME}')
     cursor.execute(sql)
     db_conn.commit()
     cursor.close()
@@ -163,20 +126,25 @@ def connect_mqtt(userdata):
     client.on_connect = on_connect
     client.on_message = on_message
     client.on_disconnect = on_disconnect
-
-    client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
-
-    client.loop_start()
+    
+    connected = False
+    while not connected:
+        try:
+            client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
+            client.loop_start()
+            
+            connected = True
+        except Exception as err:
+            print(f'connect_mqtt error: {err}')
+            time.sleep(4)
+            print('connect_mqtt retrying...')
     
     print('connect_mqtt completed')
 
-def init_flask():
-    print(f'init flask at port {FLASK_PORT}.')
+def init_flask(userdata):
+    print(f'init flask at port {FLASK_PORT}')
     
-    flask_thread = threading.Thread(target=lambda: FLASK_APP.run(host='0.0.0.0', port=FLASK_PORT, debug=True, use_reloader=False))
-    flask_thread.start()
-    
-    print(f'init flask completed')
+    FLASK_APP.run(host='0.0.0.0', port=FLASK_PORT, debug=True, use_reloader=False)
 
 @FLASK_APP.route('/metrics', methods = ['GET'])
 def index():
@@ -274,21 +242,26 @@ def publish_remote(userdata):
 def clear_local(userdata):
     print('clear_local started')
     db_conn = userdata['db_conn']
-    sql = "DELETE FROM {SQLITE_TABLE_NAME} WHERE timestamp BETWEEN datetime('now','-3 minute') AND datetime('now','-2 minute')"; 
+    sql = f"DELETE FROM {SQLITE_TABLE_NAME} WHERE timestamp <= datetime('now','-2 days')"
     cursor = db_conn.cursor()
     cursor.execute(sql)
-    print(f'total deletion = {db_conn.total_changes}\n')
+    print(f'clear_local total: {cursor.rowcount}')
     db_conn.commit()
     cursor.close()
     print('clear_local completed')
 
+print(f'initilizing...')
+
 db_conn = init_sql_table()
 userdata={'db_conn': db_conn}
-connect_mqtt(userdata)
-init_flask()
 
-# schedule.every(1).hours.do(run_threaded, publish_remote, userdata=userdata)
-schedule.every(3).minutes.do(run_threaded, clear_local, userdata=userdata)
+connect_mqtt(userdata)
+run_threaded(init_flask, userdata=userdata)
+
+print(f'\ninitilizing completed!')
+
+schedule.every(1).hours.do(run_threaded, publish_remote, userdata=userdata)
+schedule.every(1).days.do(run_threaded, clear_local, userdata=userdata)
 
 while True:
     schedule.run_pending()

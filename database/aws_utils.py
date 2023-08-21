@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 
 from botocore.config import Config
+from constants import (
+    CONFIG_MAX_ATTEMPTS,
+    CONFIG_MAX_POOL_CONNECTION,
+    CONFIG_READ_TIMEOUT,
+    REGION_NAME
+)
 import boto3
 import json
 import os
-
-# AWS
-AWS_PROFILE = 'test'
-CONFIG_MAX_ATTEMPTS = 10
-CONFIG_MAX_POOL_CONNECTION = 5000
-CONFIG_READ_TIMEOUT = 20
-DATABASE_NAME = 'testsensors'
-MAX_RECORDS_PER_WRITE = 100
-REGION_NAME = 'us-east-2'
-TABLE_NAME = 'multimetrics'
 
 def print_rejected_records_exceptions(err):
     print(f'RejectedRecords: {err}')
