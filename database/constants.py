@@ -10,6 +10,7 @@ DT_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 MQTT_HOST = '192.168.0.62'
 MQTT_PORT = 1883
 MQTT_KEEPALIVE = 60
+PC_PUBLISH_TOPIC = 'bedroom/torrent7'
 TOPIC = 'bedroom/#'
 
 # SQLITE

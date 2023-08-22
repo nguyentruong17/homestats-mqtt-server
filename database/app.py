@@ -14,6 +14,7 @@ from constants import (
     MQTT_HOST,
     MQTT_KEEPALIVE,
     MQTT_PORT,
+    PC_PUBLISH_TOPIC,
     SENSOR_NAMES_SET,
     SORTED_SENSORS_LIST,
     SQLITE_TABLE_NAME,
@@ -41,6 +42,15 @@ def on_disconnect(client):
     print('Disconnected')
 
 def on_message(client, userdata, msg):
+    topic = msg.topic
+    
+    print(topic)
+
+    if topic == f'{PC_PUBLISH_TOPIC}_Received':
+        # print(f'Received {PC_PUBLISH_TOPIC}')
+        return
+    
+    
     message=msg.payload.decode('utf-8')
     
     payloadJson = json.loads(message)
@@ -77,6 +87,10 @@ def on_message(client, userdata, msg):
     """
 
     sensorsDict['timestamp'] = timestamp
+    
+    json_string = json.dumps(sensorsDict)
+    client.publish(f'{PC_PUBLISH_TOPIC}_Received', json_string)
+    
     cursor = db_conn.cursor()
     cursor.execute(sql, sensorsDict)
     db_conn.commit()
@@ -121,7 +135,7 @@ def connect_mqtt(userdata):
     
     db_conn = userdata['db_conn']
     
-    client.user_data_set({'db_conn': db_conn})
+    client.user_data_set(userdata)
 
     client.on_connect = on_connect
     client.on_message = on_message
