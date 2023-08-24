@@ -43,8 +43,6 @@ def on_disconnect(client):
 
 def on_message(client, userdata, msg):
     topic = msg.topic
-    
-    print(f'Message with topic "{topic}" received at: {timestamp}')
 
     if topic == PC_PUBLISH_TOPIC:
         message=msg.payload.decode('utf-8')
@@ -53,6 +51,8 @@ def on_message(client, userdata, msg):
         timestamp = payloadJson['sent']
         delimitter = payloadJson['delimitter']
         sensors = payloadJson['payload']
+        
+        print(f'Message with topic "{topic}" received at: {timestamp}')
         # json_formatted_str = json.dumps(payloadJson, indent=4)
         # print(f'message received at: {timestamp}. {json_formatted_str}')
 
@@ -89,7 +89,8 @@ def on_message(client, userdata, msg):
         db_conn.commit()
         cursor.close()
     else:
-        print(f'Message with topic "{topic}" does not have any handler.')
+        utc = datetime.utcnow()
+        print(f'Message with topic "{topic}" received at {utc} does not have any handler')
 
 def get_db_conn(use_row = False):
     db_conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
