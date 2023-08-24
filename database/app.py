@@ -44,57 +44,52 @@ def on_disconnect(client):
 def on_message(client, userdata, msg):
     topic = msg.topic
     
-    print(topic)
+    print(f'Message with topic "{topic}" received at: {timestamp}')
 
-    if topic == f'{PC_PUBLISH_TOPIC}_Received':
-        # print(f'Received {PC_PUBLISH_TOPIC}')
-        return
-    
-    
-    message=msg.payload.decode('utf-8')
-    
-    payloadJson = json.loads(message)
-    timestamp = payloadJson['sent']
-    delimitter = payloadJson['delimitter']
-    sensors = payloadJson['payload']
-    # json_formatted_str = json.dumps(payloadJson, indent=4)
-    # print(f'message received at: {timestamp}. {json_formatted_str}')
-    print(f'Message received at: {timestamp}')
-    db_conn = userdata['db_conn']
-    
-    sensorsDict = dict.fromkeys(SENSOR_NAMES_SET, -1)
-    
-    for each in sensors:
-        key = each['Id']
-        value = each['Value']
+    if topic == PC_PUBLISH_TOPIC:
+        message=msg.payload.decode('utf-8')
         
-        if key in sensorsDict:
-            sensorsDict[key] = value
-    
-    cols = ', '.join(SORTED_SENSORS_LIST)
-    vals = map(lambda col: ':' + col, SORTED_SENSORS_LIST)
-    vals = ', '.join(vals)
-    
-    sql = f"""INSERT INTO {SQLITE_TABLE_NAME}
-        (
-            timestamp,
-            {cols}
-        ) VALUES
-        (
-            :timestamp,
-            {vals}
-        )
-    """
+        payloadJson = json.loads(message)
+        timestamp = payloadJson['sent']
+        delimitter = payloadJson['delimitter']
+        sensors = payloadJson['payload']
+        # json_formatted_str = json.dumps(payloadJson, indent=4)
+        # print(f'message received at: {timestamp}. {json_formatted_str}')
 
-    sensorsDict['timestamp'] = timestamp
-    
-    json_string = json.dumps(sensorsDict)
-    client.publish(f'{PC_PUBLISH_TOPIC}_Received', json_string)
-    
-    cursor = db_conn.cursor()
-    cursor.execute(sql, sensorsDict)
-    db_conn.commit()
-    cursor.close()
+        db_conn = userdata['db_conn']
+        
+        sensorsDict = dict.fromkeys(SENSOR_NAMES_SET, -1)
+        
+        for each in sensors:
+            key = each['Id']
+            value = each['Value']
+            
+            if key in sensorsDict:
+                sensorsDict[key] = value
+        
+        cols = ', '.join(SORTED_SENSORS_LIST)
+        vals = map(lambda col: ':' + col, SORTED_SENSORS_LIST)
+        vals = ', '.join(vals)
+        
+        sql = f"""INSERT INTO {SQLITE_TABLE_NAME}
+            (
+                timestamp,
+                {cols}
+            ) VALUES
+            (
+                :timestamp,
+                {vals}
+            )
+        """
+
+        sensorsDict['timestamp'] = timestamp
+        
+        cursor = db_conn.cursor()
+        cursor.execute(sql, sensorsDict)
+        db_conn.commit()
+        cursor.close()
+    else:
+        print(f'Message with topic "{topic}" does not have any handler.')
 
 def get_db_conn(use_row = False):
     db_conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
@@ -133,7 +128,7 @@ def connect_mqtt(userdata):
     print('connect_mqtt started')
     client = mqtt.Client()
     
-    db_conn = userdata['db_conn']
+    # db_conn = userdata['db_conn']
     
     client.user_data_set(userdata)
 
