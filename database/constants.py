@@ -29,6 +29,7 @@ SENSOR_NAMES_SET = {
     'sys_cpu__utilization_thread_max',
     'sys_cpu__utilization_thread_min',
     'sys_cpu__utilization',
+    'sys_gpu__clock',
     'sys_gpu__mem_clock',
     'sys_gpu__mem_usage',
     'sys_gpu__utilization',
